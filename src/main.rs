@@ -2,6 +2,7 @@ use winapi::um::libloaderapi::{GetProcAddress, LoadLibraryA};
 use winapi::um::processthreadsapi::{OpenProcess, CreateRemoteThread };
 use winapi::um::handleapi::CloseHandle;
 use winapi::um::memoryapi::{VirtualAllocEx, WriteProcessMemory};
+use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winnt::{PROCESS_CREATE_THREAD, PROCESS_VM_WRITE, PROCESS_VM_OPERATION, MEM_COMMIT, PAGE_READWRITE};
 use winapi::ctypes::c_void;
 
@@ -10,8 +11,10 @@ use std::process::Command;
 
 fn main() {
 
+    let dll = "target/debug/cheatlib.dll";
     let process = "cmd";
-    inject(process);
+    
+    inject(process, dll);
 }
 
 // Uses powershell to find 
@@ -39,14 +42,11 @@ fn get_process_id(process: &str) -> Option<(String, u32)>{
 }
 
 
-fn inject(process: &str){
+fn inject(process: &str, dll: &str){
 
-    let dll = "target/debug/cheatlib.dll";
-
-    let res = get_process_id(process).expect("No process with that name active");
-    println!("Process: {}, PID: {}", res.0, res.1);
+    let process_info = get_process_id(process).expect("No process with that name active");
+    println!("Process: {}, PID: {}", process_info.0, process_info.1);
   
-
     let loadlib_addr = unsafe {
         GetProcAddress(
         LoadLibraryA("kernelbase.dll\0".as_ptr() as *const i8),
@@ -59,17 +59,18 @@ fn inject(process: &str){
     let path_size = full_path.len() as usize + 1;
     println!("{:?}, Len: {}", full_path, path_size);
 
-    let handle = unsafe{
+    // Open the target application with permissions to create the DLL and write memory
+    let handle_process = unsafe{
         OpenProcess(PROCESS_CREATE_THREAD | PROCESS_VM_WRITE |
         PROCESS_VM_OPERATION,
         0,
-        res.1)
+        process_info.1)
     };
-    assert!(handle != std::ptr::null_mut(), "Handle is null");
-    println!("Hande: {:?}", handle);
+    assert!(handle_process != std::ptr::null_mut(), "Handle is null");
+    println!("Hande: {:?}", handle_process);
 
     let addr = unsafe{
-        VirtualAllocEx(handle,
+        VirtualAllocEx(handle_process,
             std::ptr::null_mut(), 
             path_size, 
             MEM_COMMIT, 
@@ -79,7 +80,7 @@ fn inject(process: &str){
     
     let mut n = 0;
 
-    unsafe {assert!(WriteProcessMemory(handle,
+    unsafe {assert!(WriteProcessMemory(handle_process,
         addr,
         full_path.as_ptr() as *const c_void, 
         path_size, 
@@ -87,8 +88,8 @@ fn inject(process: &str){
 
     println!("Wrote {} bytes", n);
 
-    let thread = unsafe {
-        CreateRemoteThread(handle,
+    let handle_thread = unsafe {
+        CreateRemoteThread(handle_process,
             std::ptr::null_mut(), 
             0, 
             std::mem::transmute(loadlib_addr), 
@@ -96,9 +97,11 @@ fn inject(process: &str){
             0, 
             std::ptr::null_mut())
     };
+    println!("{:?}", handle_thread);
 
-    println!("{:?}", thread);
+    unsafe {WaitForSingleObject(handle_process, 0)};
 
-    unsafe {assert!(CloseHandle(handle) != 0, "Handle failed to close sucessfully")};
+    unsafe {assert!(CloseHandle(handle_thread) != 0, "Thread handle failed to close sucessfully")};
+    unsafe {assert!(CloseHandle(handle_process) != 0, "Process Handle failed to close sucessfully")};
 
 }
