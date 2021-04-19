@@ -12,7 +12,7 @@ use std::process::Command;
 fn main() {
 
     let dll = "target/debug/cheatlib.dll";
-    let process = "cmd";
+    let process = "notepad";
     
     inject(process, dll);
 }
@@ -66,22 +66,22 @@ fn inject(process: &str, dll: &str){
         0,
         process_info.1)
     };
-    assert!(handle_process != std::ptr::null_mut(), "Handle is null");
-    println!("Hande: {:?}", handle_process);
+    assert!(handle_process != std::ptr::null_mut(), "Process Handle is null");
+    println!("Process Handle: {:?}", handle_process);
 
-    let addr = unsafe{
+    let my_base_address = unsafe{
         VirtualAllocEx(handle_process,
             std::ptr::null_mut(), 
             path_size, 
             MEM_COMMIT, 
             PAGE_READWRITE)};
-    println!("Allocation Base: {:?}", addr);
-    assert!(!addr.is_null(), "Allocation failed");
+    println!("Allocation Base: {:?}", my_base_address);
+    assert!(!my_base_address.is_null(), "Allocation failed");
     
     let mut n = 0;
 
     unsafe {assert!(WriteProcessMemory(handle_process,
-        addr,
+        my_base_address,
         full_path.as_ptr() as *const c_void, 
         path_size, 
         &mut n) != 0, "Could not write to process") };
@@ -93,11 +93,11 @@ fn inject(process: &str, dll: &str){
             std::ptr::null_mut(), 
             0, 
             std::mem::transmute(loadlib_addr), 
-            addr, 
+            my_base_address, 
             0, 
             std::ptr::null_mut())
     };
-    println!("{:?}", handle_thread);
+    println!("Thread Handle: {:?}", handle_thread);
 
     unsafe {WaitForSingleObject(handle_process, 0)};
 
