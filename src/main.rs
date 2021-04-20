@@ -12,7 +12,7 @@ use std::process::Command;
 fn main() {
 
     let dll = "target/debug/cheatlib.dll";
-    let process = "notepad";
+    let process = "note";
     
     inject(process, dll);
 }
