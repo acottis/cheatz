@@ -1,9 +1,9 @@
 use winapi::um::libloaderapi::{GetProcAddress, LoadLibraryA};
 use winapi::um::processthreadsapi::{OpenProcess, CreateRemoteThread };
 use winapi::um::handleapi::CloseHandle;
-use winapi::um::memoryapi::{VirtualAllocEx, WriteProcessMemory};
+use winapi::um::memoryapi::{VirtualAllocEx, WriteProcessMemory, VirtualFreeEx};
 use winapi::um::synchapi::WaitForSingleObject;
-use winapi::um::winnt::{PROCESS_CREATE_THREAD, PROCESS_VM_WRITE, PROCESS_VM_OPERATION, MEM_COMMIT, PAGE_READWRITE};
+use winapi::um::winnt::{PROCESS_CREATE_THREAD, PROCESS_VM_WRITE, PROCESS_VM_OPERATION, MEM_COMMIT, PAGE_READWRITE, MEM_RELEASE, MEM_RESERVE, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
 use winapi::ctypes::c_void;
 
 
@@ -12,7 +12,7 @@ use std::process::Command;
 fn main() {
 
     let dll = "target/debug/cheatlib.dll";
-    let process = "note";
+    let process = "battle";
     
     inject(process, dll);
 }
@@ -22,7 +22,7 @@ fn get_process_id(process: &str) -> Option<(String, u32)>{
 
     let out_raw = {
         Command::new("powershell.exe")
-            .args(&[format!("get-process | Where ProcessName -like \"{}*\" | foreach {{Write-Host \"$($_.ProcessName),$($_.id),$($_.Path)\"}}", process)])
+            .args(&[format!("get-process | Where ProcessName -like \"{}*\" | Select -last 1 | foreach {{Write-Host \"$($_.ProcessName),$($_.id),$($_.Path)\"}}", process)])
             .output()
             .expect("Failed to execute command")
     };
@@ -62,7 +62,7 @@ fn inject(process: &str, dll: &str){
     // Open the target application with permissions to create the DLL and write memory
     let handle_process = unsafe{
         OpenProcess(PROCESS_CREATE_THREAD | PROCESS_VM_WRITE |
-        PROCESS_VM_OPERATION,
+        PROCESS_VM_OPERATION | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
         0,
         process_info.1)
     };
@@ -73,7 +73,7 @@ fn inject(process: &str, dll: &str){
         VirtualAllocEx(handle_process,
             std::ptr::null_mut(), 
             path_size, 
-            MEM_COMMIT, 
+            MEM_COMMIT | MEM_RESERVE, 
             PAGE_READWRITE)};
     println!("Allocation Base: {:?}", my_base_address);
     assert!(!my_base_address.is_null(), "Allocation failed");
@@ -99,9 +99,15 @@ fn inject(process: &str, dll: &str){
     };
     println!("Thread Handle: {:?}", handle_thread);
 
-    unsafe {WaitForSingleObject(handle_process, 0)};
+    let status = unsafe {WaitForSingleObject(handle_thread, 0xFFFFFFFF)};
 
+    println!("Wait Status: {:X}",status);
+
+    
     unsafe {assert!(CloseHandle(handle_thread) != 0, "Thread handle failed to close sucessfully")};
+
+    unsafe {VirtualFreeEx(handle_process, full_path.as_ptr() as *mut c_void, 0, MEM_RELEASE)};
+
     unsafe {assert!(CloseHandle(handle_process) != 0, "Process Handle failed to close sucessfully")};
 
 }
