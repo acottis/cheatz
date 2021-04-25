@@ -3,25 +3,31 @@ use winapi::um::processthreadsapi::GetCurrentProcess;
 use winapi::um::memoryapi::{ReadProcessMemory,WriteProcessMemory};
 use winapi::um::errhandlingapi::GetLastError;
 
-pub struct MemoryHack<'a> {
-    pub new_bytes: &'a mut [u8],
-    pub old_bytes: &'a mut [u8],
+pub struct MemoryHack {
+    pub new_bytes: Vec<u8>,
+    pub old_bytes: Vec<u8>,
     length: usize,
     target_addr: usize,
     enabled: bool,
 }
 
-impl<'a> MemoryHack<'a>{
+impl MemoryHack{
 
     // Initialise a new hack
-    pub fn new(off_addr:usize, new_bytes: &'a mut [u8], old_bytes: &'a mut [u8]) -> Self{
+    pub fn new(off_addr:usize, bytes: &[u8]) -> Self{
         let base_addr = unsafe { GetModuleHandleA(core::ptr::null_mut()) as usize};
         println!("Base Address: {:X}, Offset count, {:X}", base_addr, off_addr);
-        let len =  new_bytes.len();
+
+        let size = bytes.len();
+        let mut new_bytes = Vec::new();
+
+        for byte in 0..bytes.len(){
+            new_bytes.push(bytes[byte]);
+        }
         Self {
             new_bytes: new_bytes,
-            old_bytes: old_bytes,
-            length: len,
+            old_bytes: vec![0u8; size],
+            length: size,
             target_addr: base_addr + off_addr,
             enabled: false,
         }
@@ -35,24 +41,25 @@ impl<'a> MemoryHack<'a>{
             println!("Patch already enabled");
             return
         }      
-        MemoryHack::read_process_memory(self.target_addr, self.old_bytes, self.length).unwrap();
-        MemoryHack::write_process_memory(self.target_addr, self.new_bytes, self.length).unwrap();
+        MemoryHack::read_process_memory(self.target_addr, &self.old_bytes, self.length).unwrap();
+        MemoryHack::write_process_memory(self.target_addr, &self.new_bytes, self.length).unwrap();
         self.enabled = true;
     }
 
     // Removes our memory hack by placing the old bytes back
     pub fn unpatch_bytes(&mut self) {
 
-        println!("Starting unpatch Old Bytes: {:X?}, New bytes: {:X?}", self.old_bytes, self.new_bytes);
+        println!("Starting unpatch new Bytes: {:X?}, old bytes: {:X?}", self.old_bytes, self.new_bytes);
         if self.enabled == false{
             println!("Patch not enabled yet");
+            return
         }
-        MemoryHack::write_process_memory(self.target_addr, self.old_bytes, self.length).unwrap();
+        MemoryHack::write_process_memory(self.target_addr, &self.old_bytes, self.length).unwrap();
         self.enabled = false;
     }
 
     // Oxidation of winapi ReadProcessMemory
-    fn read_process_memory(target_addr: usize, storage_buffer: &mut [u8], buffer_length: usize) -> Result<&str, MemoryRWError>{
+    fn read_process_memory(target_addr: usize, storage_buffer: &Vec<u8>, buffer_length: usize) -> Result<&'static str, MemoryRWError>{
 
         let result = unsafe { 
             ReadProcessMemory(
@@ -75,7 +82,7 @@ impl<'a> MemoryHack<'a>{
     }
 
     // Oxidation of winapi WriteProcessMemory
-    fn write_process_memory(target_addr: usize, storage_buffer: &mut [u8], buffer_length: usize) -> Result<&str, MemoryRWError>{
+    fn write_process_memory(target_addr: usize, storage_buffer: &Vec<u8>, buffer_length: usize) -> Result<&'static str, MemoryRWError>{
         let result = unsafe { 
             WriteProcessMemory(
             GetCurrentProcess(),

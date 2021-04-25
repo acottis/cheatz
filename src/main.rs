@@ -4,7 +4,6 @@ use winapi::um::handleapi::CloseHandle;
 use winapi::um::memoryapi::{VirtualAllocEx, WriteProcessMemory, VirtualFreeEx};
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winnt::{PROCESS_CREATE_THREAD, PROCESS_VM_WRITE, PROCESS_VM_OPERATION, MEM_COMMIT, PAGE_READWRITE, MEM_RELEASE, MEM_RESERVE, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
-use winapi::ctypes::c_void;
 
 
 use std::process::Command;
@@ -27,7 +26,7 @@ fn get_process_id(process: &str) -> Option<(String, u32)>{
             .expect("Failed to execute command")
     };
 
-    let out_str = std::str::from_utf8(&out_raw.stdout).expect("Failed to convert pid");
+    let out_str = core::str::from_utf8(&out_raw.stdout).expect("Failed to convert pid");
 
     for line in out_str.lines(){
 
@@ -66,12 +65,12 @@ fn inject(process: &str, dll: &str){
         0,
         process_info.1)
     };
-    assert!(handle_process != std::ptr::null_mut(), "Process Handle is null");
+    assert!(handle_process != core::ptr::null_mut(), "Process Handle is null");
     println!("Process Handle: {:?}", handle_process);
 
     let my_base_address = unsafe{
         VirtualAllocEx(handle_process,
-            std::ptr::null_mut(), 
+            core::ptr::null_mut(), 
             path_size, 
             MEM_COMMIT | MEM_RESERVE, 
             PAGE_READWRITE)};
@@ -82,7 +81,7 @@ fn inject(process: &str, dll: &str){
 
     unsafe {assert!(WriteProcessMemory(handle_process,
         my_base_address,
-        full_path.as_ptr() as *const c_void, 
+        core::mem::transmute(full_path.as_ptr()), 
         path_size, 
         &mut n) != 0, "Could not write to process") };
 
@@ -90,12 +89,12 @@ fn inject(process: &str, dll: &str){
 
     let handle_thread = unsafe {
         CreateRemoteThread(handle_process,
-            std::ptr::null_mut(), 
+            core::ptr::null_mut(), 
             0, 
-            std::mem::transmute(loadlib_addr), 
+            core::mem::transmute(loadlib_addr), 
             my_base_address, 
             0, 
-            std::ptr::null_mut())
+            core::ptr::null_mut())
     };
     println!("Thread Handle: {:?}", handle_thread);
 
@@ -106,7 +105,7 @@ fn inject(process: &str, dll: &str){
     
     unsafe {assert!(CloseHandle(handle_thread) != 0, "Thread handle failed to close sucessfully")};
 
-    unsafe {VirtualFreeEx(handle_process, full_path.as_ptr() as *mut c_void, 0, MEM_RELEASE)};
+    unsafe {VirtualFreeEx(handle_process, core::mem::transmute(full_path.as_ptr()), 0, MEM_RELEASE)};
 
     unsafe {assert!(CloseHandle(handle_process) != 0, "Process Handle failed to close sucessfully")};
 

@@ -30,12 +30,12 @@ extern fn on_dll_attach(hinst: *mut usize){
 
     let x = unsafe { 
         CreateThread(
-            std::ptr::null_mut(),
+            core::ptr::null_mut(),
             0, 
-            std::mem::transmute(cheat_main as *const ()), 
-            std::mem::transmute(hinst), 
+            core::mem::transmute(cheat_main as *const ()), 
+            core::mem::transmute(hinst), 
             0, 
-            std::ptr::null_mut()
+            core::ptr::null_mut()
         )};
 
     println!("Created Thread in DLL: {:?}", x);
@@ -57,19 +57,17 @@ fn cheat_main(hinst: *mut usize){
 
     println!("Process Attached, base address: {:?}", hinst);
 
-    let kc_reverse_vals = (0x253C25, &mut [0x29u8;1], &mut [0u8; 1]);
-    let kc_reverse = &mut MemoryHack::new(kc_reverse_vals.0,kc_reverse_vals.1, kc_reverse_vals.2);
-
+    let kc_reverse = &mut MemoryHack::new(0x253C25,b"\x29");
 
     loop{
         std::thread::sleep(std::time::Duration::from_millis(10));
         
         if key_down(Key::F5){
-            println!("F5 is down");
+            println!("F5 is pressed");
             kc_reverse.patch_bytes();
         }
         if key_down(Key::F6){
-            println!("F6 is down");
+            println!("F6 is pressed");
             kc_reverse.unpatch_bytes();
         }
     };
