@@ -13,4 +13,4 @@ crate-type = ["rlib", "dylib"]
 
 
 [dependencies]
-winapi = { version = "0.3.9", features = ["libloaderapi", "fileapi", "winuser", "processthreadsapi", "handleapi", "memoryapi", "synchapi","consoleapi"]} 
+winapi = { version = "0.3.9", features = ["libloaderapi", "fileapi", "winuser", "processthreadsapi", "handleapi", "memoryapi", "synchapi","consoleapi", "errhandlingapi"]} 

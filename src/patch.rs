@@ -8,5 +8,9 @@ pub struct MemoryHack {
 }
 
 impl MemoryHack{
-    
+
+    fn bytes();
+
 }
+
+

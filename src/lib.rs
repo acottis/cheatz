@@ -4,6 +4,8 @@ use winapi::um::consoleapi::AllocConsole;
 use winapi::ctypes::c_void;
 use winapi::um::winuser::{GetAsyncKeyState, WM_KEYDOWN};
 use winapi::um::libloaderapi::GetModuleHandleA;
+use winapi::um::memoryapi::{ReadProcessMemory,WriteProcessMemory};
+use winapi::um::errhandlingapi::GetLastError;
 
 use std::fs::OpenOptions;
 use std::io::prelude::*;
@@ -75,7 +77,6 @@ fn cheat_main(hinst: *mut usize){
     println!("size: {}", core::mem::size_of::<*const usize>());
 
     println!("base addr {:X}", base_addr as usize);
-    println!("target addr {:X}", target_addr);
 
     //let y = unsafe{ base_addr.offset(target/4)};
 
@@ -87,7 +88,24 @@ fn cheat_main(hinst: *mut usize){
 
 
     println!("Content to modify {:X?}", target as u8);
-    println!("test: {:X?}", target_addr as *mut usize);
+    println!("Target Addr: {:X?}", target_addr as *mut usize);
+
+    let data: [u8;1] = [0x29];
+
+    let mut rec_data: [u8;100] = [0;100]; 
+
+    let x  = unsafe {
+        ReadProcessMemory(
+            GetCurrentProcess(),
+                    target_addr as *mut c_void,
+                    std::mem::transmute(rec_data.as_ptr()),
+                    10, 
+                    std::ptr::null_mut())
+    };
+
+    println!("Result: {} with value {:X?}",x, rec_data);
+
+    println!("{:?}", unsafe {GetLastError()});
 
     //unsafe { std::ptr::write_bytes(target_addr as *mut usize, 0x29, 1) };
     
@@ -102,18 +120,27 @@ fn cheat_main(hinst: *mut usize){
         std::thread::sleep(std::time::Duration::from_millis(10));
         let key_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::F5.code()))};
         match key_press {
-            KeyPress::WasDown => println!("Detected Key: {:?}", key_press),
+            KeyPress::WasDown => {
+                println!("Detected Key: {:?}", key_press);
+                let res = unsafe { WriteProcessMemory(
+                    GetCurrentProcess(),
+                    target_addr as *mut usize as *mut c_void,
+                    data.as_ptr() as *mut c_void,
+                    1, 
+                    std::ptr::null_mut())};
+                println!("Result: {}", res);
+            },
             KeyPress::Down => println!("Detected Key: {:?}", key_press),
             _ => ()// println!("Reported other, {:?}", key_press),
         }
 
         
-        let esc_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::ESC.code()))};
-        match esc_press {
-            KeyPress::WasDown => println!("Detected Key: {:?}", esc_press),
-            KeyPress::Down => break,
-            _ => ()// println!("Reported other, {:?}", key_press),
-        }
+        // let esc_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::ESC.code()))};
+        // match esc_press {
+        //     KeyPress::WasDown => println!("Detected Key: {:?}", esc_press),
+        //     KeyPress::Down => break,
+        //     _ => ()// println!("Reported other, {:?}", key_press),
+        // }
 
     };
 
