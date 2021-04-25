@@ -10,6 +10,9 @@ use winapi::um::errhandlingapi::GetLastError;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
+mod patch;
+
+
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn DllMain(hinst: *mut usize, reason: Reason, _reserved: usize) -> bool {
@@ -66,7 +69,13 @@ fn cheat_main(hinst: *mut usize){
         GetModuleHandleA(std::ptr::null_mut()) as *const usize
     };
 
+    let new_data: [u8;10] = [0x29;10];
+    let mut old_data: [u8;10] = [0;10]; 
     let target_off = 0x253C25;
+
+    patch::bytes(target_off, new_data, old_data);
+
+    
 
     let target_addr = base_addr as usize + target_off;
 
@@ -78,32 +87,26 @@ fn cheat_main(hinst: *mut usize){
 
     println!("base addr {:X}", base_addr as usize);
 
-    //let y = unsafe{ base_addr.offset(target/4)};
-
-    //println!("Address to modify: {:?}", y);
-
-    //let test = unsafe {base_addr.offset(target)};
-
     let mut target = unsafe {std::ptr::read(target_addr as *const usize)};
 
 
     println!("Content to modify {:X?}", target as u8);
     println!("Target Addr: {:X?}", target_addr as *mut usize);
 
-    let data: [u8;1] = [0x29];
+    
 
-    let mut rec_data: [u8;100] = [0;100]; 
+    
 
     let x  = unsafe {
         ReadProcessMemory(
             GetCurrentProcess(),
                     target_addr as *mut c_void,
-                    std::mem::transmute(rec_data.as_ptr()),
+                    std::mem::transmute(old_data.as_ptr()),
                     10, 
                     std::ptr::null_mut())
     };
 
-    println!("Result: {} with value {:X?}",x, rec_data);
+    println!("Result: {} with value {:X?}",x, old_data);
 
     println!("{:?}", unsafe {GetLastError()});
 
@@ -125,7 +128,7 @@ fn cheat_main(hinst: *mut usize){
                 let res = unsafe { WriteProcessMemory(
                     GetCurrentProcess(),
                     target_addr as *mut usize as *mut c_void,
-                    data.as_ptr() as *mut c_void,
+                    new_data.as_ptr() as *mut c_void,
                     1, 
                     std::ptr::null_mut())};
                 println!("Result: {}", res);
