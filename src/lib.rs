@@ -43,16 +43,13 @@ extern fn on_dll_attach(hinst: *mut usize){
     println!("Created Thread in DLL: {:?}", x);
 
 }
-
 extern fn on_dll_detach(){
     println!("Process Detached");
 }
-
 extern fn on_thread_attach(){
     println!("Thread Attached");
     
 }
-
 extern fn on_thread_detach(){
     println!("Thread Detached");
 }
@@ -62,7 +59,7 @@ fn cheat_main(hinst: *mut usize){
 
     println!("Process Attached, base address: {:?}", hinst);
 
-    let kc_reverse_vals = (0x253C25, &mut [0x29u8;1], &mut [0u8; 1]);
+    let kc_reverse_vals = (0x253C25, &mut [0x29u8;2], &mut [0u8; 2]);
     let kc_reverse = &mut MemoryHack::new(kc_reverse_vals.0,kc_reverse_vals.1, kc_reverse_vals.2);
 
     loop{

@@ -6,6 +6,7 @@ use winapi::um::errhandlingapi::GetLastError;
 pub struct MemoryHack<'a> {
     pub new_bytes: &'a mut [u8],
     pub old_bytes: &'a mut [u8],
+    length: usize,
     target_addr: usize,
     enabled: bool,
 }
@@ -13,11 +14,15 @@ pub struct MemoryHack<'a> {
 impl<'a> MemoryHack<'a>{
 
     pub fn new(off_addr:usize, new_bytes: &'a mut [u8], old_bytes: &'a mut [u8]) -> Self{
+        let len = {
+            new_bytes.len()
+        };
         let base_addr = unsafe { GetModuleHandleA(core::ptr::null_mut()) as usize};
         println!("Base Address: {:X}, Offset count, {:X}", base_addr, off_addr);
         Self {
             new_bytes: new_bytes,
             old_bytes: old_bytes,
+            length: len,
             target_addr: base_addr + off_addr,
             enabled: false,
         }
@@ -31,8 +36,8 @@ impl<'a> MemoryHack<'a>{
             println!("Patch already enabled");
             return
         }      
-        MemoryHack::read_process_memory(self.target_addr, self.old_bytes).unwrap();
-        MemoryHack::write_process_memory(self.target_addr, self.new_bytes).unwrap();
+        MemoryHack::read_process_memory(self.target_addr, self.old_bytes, self.length).unwrap();
+        MemoryHack::write_process_memory(self.target_addr, self.new_bytes, self.length).unwrap();
         self.enabled = true;
     }
 
@@ -42,18 +47,18 @@ impl<'a> MemoryHack<'a>{
         if self.enabled == false{
             println!("Patch not enabled yet");
         }
-        MemoryHack::write_process_memory(self.target_addr, self.old_bytes).unwrap();
+        MemoryHack::write_process_memory(self.target_addr, self.old_bytes, self.length).unwrap();
         self.enabled = false;
     }
 
-    fn read_process_memory(target_addr: usize, storage_buffer: &mut [u8]) -> Result<&str, MemoryRWError>{
+    fn read_process_memory(target_addr: usize, storage_buffer: &mut [u8], buffer_length: usize) -> Result<&str, MemoryRWError>{
 
         let result = unsafe { 
             ReadProcessMemory(
             GetCurrentProcess(),
             core::mem::transmute(target_addr),
             core::mem::transmute(storage_buffer.as_ptr()),
-            1, 
+            buffer_length, 
             core::ptr::null_mut()) 
         };
 
@@ -68,13 +73,13 @@ impl<'a> MemoryHack<'a>{
         }
     }
 
-    fn write_process_memory(target_addr: usize, storage_buffer: &mut [u8]) -> Result<&str, MemoryRWError>{
+    fn write_process_memory(target_addr: usize, storage_buffer: &mut [u8], buffer_length: usize) -> Result<&str, MemoryRWError>{
         let result = unsafe { 
             WriteProcessMemory(
             GetCurrentProcess(),
             core::mem::transmute(target_addr),
             core::mem::transmute(storage_buffer.as_ptr()),
-            1, 
+            buffer_length, 
             core::ptr::null_mut())};
 
             println!("Result of memory write: {}", result);
