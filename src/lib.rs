@@ -1,8 +1,6 @@
-//use winapi::um::winuser::{MessageBoxW, MB_OK, MB_ICONINFORMATION};
-use winapi::um::processthreadsapi::{CreateThread};
+use winapi::um::processthreadsapi::CreateThread;
 use winapi::um::consoleapi::AllocConsole;
-use winapi::ctypes::c_void;
-use winapi::um::winuser::{GetAsyncKeyState, WM_KEYDOWN};
+use winapi::um::winuser::GetAsyncKeyState;
 
 use std::fs::OpenOptions;
 use std::io::prelude::*;
@@ -35,7 +33,7 @@ extern fn on_dll_attach(hinst: *mut usize){
             std::ptr::null_mut(),
             0, 
             std::mem::transmute(cheat_main as *const ()), 
-            hinst as *mut c_void, 
+            std::mem::transmute(hinst), 
             0, 
             std::ptr::null_mut()
         )};
@@ -108,7 +106,6 @@ pub enum Reason{
     DllThreadDetach = 3,
 }
 
-#[derive(Debug)]
 #[repr(i32)]
 #[allow(dead_code)]
 enum Key{
