@@ -13,12 +13,11 @@ pub struct MemoryHack<'a> {
 
 impl<'a> MemoryHack<'a>{
 
+    // Initialise a new hack
     pub fn new(off_addr:usize, new_bytes: &'a mut [u8], old_bytes: &'a mut [u8]) -> Self{
-        let len = {
-            new_bytes.len()
-        };
         let base_addr = unsafe { GetModuleHandleA(core::ptr::null_mut()) as usize};
         println!("Base Address: {:X}, Offset count, {:X}", base_addr, off_addr);
+        let len =  new_bytes.len();
         Self {
             new_bytes: new_bytes,
             old_bytes: old_bytes,
@@ -41,6 +40,7 @@ impl<'a> MemoryHack<'a>{
         self.enabled = true;
     }
 
+    // Removes our memory hack by placing the old bytes back
     pub fn unpatch_bytes(&mut self) {
 
         println!("Starting unpatch Old Bytes: {:X?}, New bytes: {:X?}", self.old_bytes, self.new_bytes);
@@ -51,6 +51,7 @@ impl<'a> MemoryHack<'a>{
         self.enabled = false;
     }
 
+    // Oxidation of winapi ReadProcessMemory
     fn read_process_memory(target_addr: usize, storage_buffer: &mut [u8], buffer_length: usize) -> Result<&str, MemoryRWError>{
 
         let result = unsafe { 
@@ -73,6 +74,7 @@ impl<'a> MemoryHack<'a>{
         }
     }
 
+    // Oxidation of winapi WriteProcessMemory
     fn write_process_memory(target_addr: usize, storage_buffer: &mut [u8], buffer_length: usize) -> Result<&str, MemoryRWError>{
         let result = unsafe { 
             WriteProcessMemory(

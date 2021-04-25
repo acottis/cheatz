@@ -59,34 +59,31 @@ fn cheat_main(hinst: *mut usize){
 
     println!("Process Attached, base address: {:?}", hinst);
 
-    let kc_reverse_vals = (0x253C25, &mut [0x29u8;2], &mut [0u8; 2]);
+    let kc_reverse_vals = (0x253C25, &mut [0x29u8;1], &mut [0u8; 1]);
     let kc_reverse = &mut MemoryHack::new(kc_reverse_vals.0,kc_reverse_vals.1, kc_reverse_vals.2);
+
 
     loop{
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let f5_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::F5 as i32))};
-        match f5_press {
-            KeyPress::WasDown => {
-                println!("Detected Key: {:?}", f5_press);
-                kc_reverse.patch_bytes();
-
-            },
-            // KeyPress::Down => println!("Detected Key: {:?}", f5_press),
-            _ => ()// println!("Reported other, {:?}", f5_press),
+        
+        if key_down(Key::F5){
+            println!("F5 is down");
+            kc_reverse.patch_bytes();
         }
-
-        let f6_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::F6 as i32))};
-        match f6_press {
-            KeyPress::WasDown => {
-                println!("Detected Key: {:?}", f6_press);
-                kc_reverse.unpatch_bytes();
-            },
-            //KeyPress::Down => break,
-            _ => ()// println!("Reported other, {:?}", key_press),
+        if key_down(Key::F6){
+            println!("F6 is down");
+            kc_reverse.unpatch_bytes();
         }
-
     };
+}
 
+fn key_down(key: Key) -> bool {
+    unsafe{
+        if GetAsyncKeyState(key as i32) as u16 == 0x8001{
+            return true
+        }
+    }
+    false
 }
 
 fn _log_to_disk(msg: String) -> std::io::Result<()>{
@@ -109,23 +106,6 @@ pub enum Reason{
     DllProcessAttach = 1,
     DllThreadAttach = 2,
     DllThreadDetach = 3,
-}
-#[derive(Debug, PartialEq, Eq)]
-#[repr(u32)]
-enum KeyPress{
-    Down,
-    WasDown,
-    Other,
-}
-
-impl KeyPress{
-    fn read(state: i16) -> KeyPress{
-        match state as u16 {
-            0x8000 => KeyPress::Down,
-            0x8001 => KeyPress::WasDown,
-            _ => KeyPress::Other,
-        }
-    }
 }
 
 #[derive(Debug)]
