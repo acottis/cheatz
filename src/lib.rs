@@ -1,11 +1,10 @@
+use patch::MemoryHack;
 //use winapi::um::winuser::{MessageBoxW, MB_OK, MB_ICONINFORMATION};
-use winapi::um::processthreadsapi::{CreateThread, GetCurrentProcess};
+use winapi::um::processthreadsapi::{CreateThread};
 use winapi::um::consoleapi::AllocConsole;
 use winapi::ctypes::c_void;
 use winapi::um::winuser::{GetAsyncKeyState, WM_KEYDOWN};
 use winapi::um::libloaderapi::GetModuleHandleA;
-use winapi::um::memoryapi::{ReadProcessMemory,WriteProcessMemory};
-use winapi::um::errhandlingapi::GetLastError;
 
 use std::fs::OpenOptions;
 use std::io::prelude::*;
@@ -63,60 +62,26 @@ extern fn on_thread_detach(){
 fn cheat_main(hinst: *mut usize){
 
     println!("Process Attached, base address: {:?}", hinst);
-    println!("Key {:?}", Key::F5);
 
     let base_addr = unsafe {
         GetModuleHandleA(std::ptr::null_mut()) as *const usize
     };
-
-    let new_data: [u8;10] = [0x29;10];
-    let mut old_data: [u8;10] = [0;10]; 
-    let target_off = 0x253C25;
-
-    patch::bytes(target_off, new_data, old_data);
-
-    
-
-    let target_addr = base_addr as usize + target_off;
-
-    let x = unsafe {std::ptr::read(base_addr)};
-
-    println!("Content at base address: {:X}", x as u8);
-
-    println!("size: {}", core::mem::size_of::<*const usize>());
-
     println!("base addr {:X}", base_addr as usize);
 
-    let mut target = unsafe {std::ptr::read(target_addr as *const usize)};
-
-
-    println!("Content to modify {:X?}", target as u8);
-    println!("Target Addr: {:X?}", target_addr as *mut usize);
-
-    
-
-    
-
-    let x  = unsafe {
-        ReadProcessMemory(
-            GetCurrentProcess(),
-                    target_addr as *mut c_void,
-                    std::mem::transmute(old_data.as_ptr()),
-                    10, 
-                    std::ptr::null_mut())
-    };
-
-    println!("Result: {} with value {:X?}",x, old_data);
-
-    println!("{:?}", unsafe {GetLastError()});
-
-    //unsafe { std::ptr::write_bytes(target_addr as *mut usize, 0x29, 1) };
-    
-    // let read = unsafe {
-    //     std::ptr::read(target)
+    // let kill_count_reverse = MemoryHack {
+    //     off_addr: 0x253C25,
+    //     new_bytes: &[0x29u8;1],
+    //     old_bytes: &mut [0;1],   
     // };
 
-    // println!("At target: {:X}", read);
+
+    let kc_reverse_vals = (0x253C25, &[0x29u8;1], &mut [0u8; 1]);
+
+    let kc_reverse = MemoryHack::new(kc_reverse_vals.0,kc_reverse_vals.1, kc_reverse_vals.2);
+
+    kc_reverse.patch_bytes();
+
+    //patch::bytes(target_off, new_data, old_data);
 
     loop{
 
@@ -125,39 +90,22 @@ fn cheat_main(hinst: *mut usize){
         match key_press {
             KeyPress::WasDown => {
                 println!("Detected Key: {:?}", key_press);
-                let res = unsafe { WriteProcessMemory(
-                    GetCurrentProcess(),
-                    target_addr as *mut usize as *mut c_void,
-                    new_data.as_ptr() as *mut c_void,
-                    1, 
-                    std::ptr::null_mut())};
-                println!("Result: {}", res);
             },
             KeyPress::Down => println!("Detected Key: {:?}", key_press),
             _ => ()// println!("Reported other, {:?}", key_press),
         }
 
         
-        // let esc_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::ESC.code()))};
-        // match esc_press {
-        //     KeyPress::WasDown => println!("Detected Key: {:?}", esc_press),
-        //     KeyPress::Down => break,
-        //     _ => ()// println!("Reported other, {:?}", key_press),
-        // }
+        let esc_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::ESC.code()))};
+        match esc_press {
+            KeyPress::WasDown => println!("Detected Key: {:?}", esc_press),
+            //KeyPress::Down => break,
+            _ => ()// println!("Reported other, {:?}", key_press),
+        }
 
     };
 
 }
-
-// fn pop_up(){
-
-//     let l_msg: Vec<u16> = "Injected into your veinzzz\0".encode_utf16().collect();
-//     let l_title: Vec<u16> = "Hacked\0".encode_utf16().collect();
-
-//     unsafe {
-//         MessageBoxW(std::ptr::null_mut(), l_msg.as_ptr(), l_title.as_ptr(), MB_OK | MB_ICONINFORMATION);
-//     }
-// }
 
 fn log(msg: String) -> std::io::Result<()>{
     
