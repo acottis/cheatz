@@ -1,15 +1,14 @@
-use patch::MemoryHack;
 //use winapi::um::winuser::{MessageBoxW, MB_OK, MB_ICONINFORMATION};
 use winapi::um::processthreadsapi::{CreateThread};
 use winapi::um::consoleapi::AllocConsole;
 use winapi::ctypes::c_void;
 use winapi::um::winuser::{GetAsyncKeyState, WM_KEYDOWN};
-use winapi::um::libloaderapi::GetModuleHandleA;
 
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
 mod patch;
+use patch::MemoryHack;
 
 
 #[allow(non_snake_case)]
@@ -63,42 +62,28 @@ fn cheat_main(hinst: *mut usize){
 
     println!("Process Attached, base address: {:?}", hinst);
 
-    let base_addr = unsafe {
-        GetModuleHandleA(std::ptr::null_mut()) as *const usize
-    };
-    println!("base addr {:X}", base_addr as usize);
-
-    // let kill_count_reverse = MemoryHack {
-    //     off_addr: 0x253C25,
-    //     new_bytes: &[0x29u8;1],
-    //     old_bytes: &mut [0;1],   
-    // };
-
-
-    let kc_reverse_vals = (0x253C25, &[0x29u8;1], &mut [0u8; 1]);
-
-    let kc_reverse = MemoryHack::new(kc_reverse_vals.0,kc_reverse_vals.1, kc_reverse_vals.2);
-
-    kc_reverse.patch_bytes();
-
-    //patch::bytes(target_off, new_data, old_data);
+    let kc_reverse_vals = (0x253C25, &mut [0x29u8;1], &mut [0u8; 1]);
+    let kc_reverse = &mut MemoryHack::new(kc_reverse_vals.0,kc_reverse_vals.1, kc_reverse_vals.2);
 
     loop{
-
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let key_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::F5.code()))};
-        match key_press {
+        let f5_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::F5 as i32))};
+        match f5_press {
             KeyPress::WasDown => {
-                println!("Detected Key: {:?}", key_press);
+                println!("Detected Key: {:?}", f5_press);
+                kc_reverse.patch_bytes();
+
             },
-            KeyPress::Down => println!("Detected Key: {:?}", key_press),
-            _ => ()// println!("Reported other, {:?}", key_press),
+            // KeyPress::Down => println!("Detected Key: {:?}", f5_press),
+            _ => ()// println!("Reported other, {:?}", f5_press),
         }
 
-        
-        let esc_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::ESC.code()))};
-        match esc_press {
-            KeyPress::WasDown => println!("Detected Key: {:?}", esc_press),
+        let f6_press: KeyPress = unsafe {KeyPress::read(GetAsyncKeyState(Key::F6 as i32))};
+        match f6_press {
+            KeyPress::WasDown => {
+                println!("Detected Key: {:?}", f6_press);
+                kc_reverse.unpatch_bytes();
+            },
             //KeyPress::Down => break,
             _ => ()// println!("Reported other, {:?}", key_press),
         }
@@ -107,7 +92,7 @@ fn cheat_main(hinst: *mut usize){
 
 }
 
-fn log(msg: String) -> std::io::Result<()>{
+fn _log_to_disk(msg: String) -> std::io::Result<()>{
     
     let mut file = OpenOptions::new()
     .write(true)
@@ -148,17 +133,9 @@ impl KeyPress{
 
 #[derive(Debug)]
 #[repr(i32)]
+#[allow(dead_code)]
 enum Key{
     F5 = 0x74,
+    F6 = 0x75,
     ESC = 0x1B,
-}
-
-impl Key{
-    fn code(&self) -> i32{
-        match self {
-            Key::F5 => 0x74,
-            Key::ESC => 0x1B,
-            _ => 0
-        }
-    }
 }

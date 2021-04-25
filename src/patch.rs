@@ -1,91 +1,108 @@
 use winapi::um::libloaderapi::GetModuleHandleA;
 use winapi::um::processthreadsapi::GetCurrentProcess;
 use winapi::um::memoryapi::{ReadProcessMemory,WriteProcessMemory};
+use winapi::um::errhandlingapi::GetLastError;
 
 pub struct MemoryHack<'a> {
-    pub off_addr: usize,
-    pub new_bytes: &'a[u8],
+    pub new_bytes: &'a mut [u8],
     pub old_bytes: &'a mut [u8],
+    target_addr: usize,
     enabled: bool,
 }
 
 impl<'a> MemoryHack<'a>{
 
-    pub fn new(off_addr:usize, new_bytes:  &'a[u8], old_bytes: &'a mut [u8]) -> Self{
-
-        MemoryHack {
-            off_addr: off_addr,
+    pub fn new(off_addr:usize, new_bytes: &'a mut [u8], old_bytes: &'a mut [u8]) -> Self{
+        let base_addr = unsafe { GetModuleHandleA(core::ptr::null_mut()) as usize};
+        println!("Base Address: {:X}, Offset count, {:X}", base_addr, off_addr);
+        Self {
             new_bytes: new_bytes,
             old_bytes: old_bytes,
+            target_addr: base_addr + off_addr,
             enabled: false,
         }
     }
 
-    pub fn patch_bytes(&self){
+    /// Apply the patch to change target bytes to our hack
+    pub fn patch_bytes(&mut self) {
 
-        println!("new bytes: {:X?}", self.new_bytes);
+        println!("Starting patch Old Bytes: {:X?}, New bytes: {:X?}", self.old_bytes, self.new_bytes);
+        if self.enabled == true{
+            println!("Patch already enabled");
+            return
+        }      
+        MemoryHack::read_process_memory(self.target_addr, self.old_bytes).unwrap();
+        MemoryHack::write_process_memory(self.target_addr, self.new_bytes).unwrap();
+        self.enabled = true;
+    }
 
-        // Get base address of program
-        let base_addr = unsafe {
-            GetModuleHandleA(core::ptr::null_mut()) as usize
-        };
-    
-        // Write bytes and return success or failure
-        let write_result = unsafe { WriteProcessMemory(
+    pub fn unpatch_bytes(&mut self) {
+
+        println!("Starting unpatch Old Bytes: {:X?}, New bytes: {:X?}", self.old_bytes, self.new_bytes);
+        if self.enabled == false{
+            println!("Patch not enabled yet");
+        }
+        MemoryHack::write_process_memory(self.target_addr, self.old_bytes).unwrap();
+        self.enabled = false;
+    }
+
+    fn read_process_memory(target_addr: usize, storage_buffer: &mut [u8]) -> Result<&str, MemoryRWError>{
+
+        let result = unsafe { 
+            ReadProcessMemory(
             GetCurrentProcess(),
-            core::mem::transmute(base_addr + self.off_addr),
-            core::mem::transmute(self.new_bytes.as_ptr()),
+            core::mem::transmute(target_addr),
+            core::mem::transmute(storage_buffer.as_ptr()),
+            1, 
+            core::ptr::null_mut()) 
+        };
+
+        println!("Result of memory read: {}, with data: {:X?}", result, storage_buffer);
+
+        match result {
+            1 => Ok("Memory Read Sucessful"),
+            _ => {
+                println!("Last error when reading: {}",unsafe {GetLastError()});
+                Err(MemoryRWError::CantRead)
+            }
+        }
+    }
+
+    fn write_process_memory(target_addr: usize, storage_buffer: &mut [u8]) -> Result<&str, MemoryRWError>{
+        let result = unsafe { 
+            WriteProcessMemory(
+            GetCurrentProcess(),
+            core::mem::transmute(target_addr),
+            core::mem::transmute(storage_buffer.as_ptr()),
             1, 
             core::ptr::null_mut())};
-        println!("Result of memory write: {}", write_result);
-    
-        // Read bytes and return success or failure
-        let read_result  = unsafe {
-            ReadProcessMemory(
-                GetCurrentProcess(),
-                core::mem::transmute(base_addr as usize + self.off_addr),
-                core::mem::transmute(self.old_bytes.as_ptr()),
-                1, 
-                core::ptr::null_mut())
-        };
-        println!("Result of memory read: {}, with data: {:X?}", read_result, self.old_bytes);
 
+            println!("Result of memory write: {}", result);
+
+        match result {
+            1 => Ok("Memory Write Sucessful"),
+            _ => {
+                println!("Last error when writing: {}",unsafe {GetLastError()});
+                Err(MemoryRWError::CantRead)
+            }
+        }
     }
 
 }
 
-
-// Exchange bytes and store old at target offset
-pub fn bytes(off_addr:usize, new_bytes: &[u8], old_bytes: &mut [u8]){
-    
-    println!("new bytes: {:X?}", new_bytes);
-
-    // Get base address of program
-    let base_addr = unsafe {
-        GetModuleHandleA(core::ptr::null_mut()) as usize
-    };
-
-    // Write bytes and return success or failure
-    let write_result = unsafe { WriteProcessMemory(
-        GetCurrentProcess(),
-        core::mem::transmute(base_addr + off_addr),
-        core::mem::transmute(new_bytes.as_ptr()),
-        1, 
-        core::ptr::null_mut())};
-    println!("Result of memory write: {}", write_result);
-
-    // Read bytes and return success or failure
-    let read_result  = unsafe {
-        ReadProcessMemory(
-            GetCurrentProcess(),
-            core::mem::transmute(base_addr as usize + off_addr),
-            core::mem::transmute(old_bytes.as_ptr()),
-            1, 
-            core::ptr::null_mut())
-    };
-    println!("Result of memory read: {}, with data: {:X?}", read_result, old_bytes);
-
-
+#[derive(Debug)]
+#[allow(dead_code)]
+pub enum MemoryRWError{
+    CantWrite,
+    CantRead,
 }
 
+// impl core::fmt::Display for PatchStatus{
+//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+//         match self {
+//             PatchStatus::CantRead => write!(f, "Can not read from target memory"),
+//             PatchStatus::CantWrite => write!(f, "Can not write to target memory"),
+//         }
+//     }
+// }
 
