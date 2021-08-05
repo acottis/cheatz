@@ -1,3 +1,15 @@
+//! Must be compiled with stable-i686-pc-windows-msvc as the game is 32 bit
+//! ### Todo
+//! - Speedhack
+//! - AimBot
+//! - Split into two crates
+//! - Better error handling on opening game
+//! 
+//! ### Memeory Addresses:
+//! BattlefrontII.exe+253C25 Address where the kill count is changed
+#[warn(missing_docs)]
+
+
 use winapi::um::libloaderapi::{GetProcAddress, LoadLibraryA};
 use winapi::um::processthreadsapi::{OpenProcess, CreateRemoteThread };
 use winapi::um::handleapi::CloseHandle;
@@ -11,7 +23,7 @@ use std::process::Command;
 fn main() {
 
     let dll = "target/debug/cheatlib.dll";
-    let process = "battle";
+    let process = "Battlefront";
     
     inject(process, dll);
 }
