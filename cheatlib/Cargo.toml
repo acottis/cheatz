@@ -1,5 +1,5 @@
 [package]
-name = "rusty-dll"
+name = "cheatlib"
 version = "0.1.0"
 authors = ["adamc <you@example.com>"]
 edition = "2018"
@@ -7,7 +7,6 @@ edition = "2018"
 [lib]
 name = "cheatlib"
 crate-type = ["rlib", "cdylib"]
-# path = "src/lib.rs" 
 
 
 [dependencies]

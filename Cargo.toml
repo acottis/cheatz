@@ -8,5 +8,5 @@ edition = "2018"
 
 
 [dependencies]
-rusty-dll = { path = "rusty-dll"}
+cheatlib = { path = "cheatlib"}
 winapi = { version = "0.3.9", features = ["libloaderapi", "fileapi", "winuser", "processthreadsapi", "handleapi", "memoryapi", "synchapi","consoleapi", "errhandlingapi"]} 

@@ -23,9 +23,9 @@ use std::process::Command;
 fn main() {
 
     let dll = "target/debug/deps/cheatlib.dll";
-    const process: &str = "Battlefront";
+    const PROCESS: &str = "Battlefront";
     
-    inject(process, dll);
+    inject(PROCESS, dll);
 }
 
 // Uses powershell to find 

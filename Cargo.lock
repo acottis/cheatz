@@ -3,17 +3,17 @@
 version = 3
 
 [[package]]
-name = "cheatz"
+name = "cheatlib"
 version = "0.1.0"
 dependencies = [
- "rusty-dll",
  "winapi",
 ]
 
 [[package]]
-name = "rusty-dll"
+name = "cheatz"
 version = "0.1.0"
 dependencies = [
+ "cheatlib",
  "winapi",
 ]
 
