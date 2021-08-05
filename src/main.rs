@@ -22,8 +22,8 @@ use std::process::Command;
 
 fn main() {
 
-    let dll = "target/debug/cheatlib.dll";
-    let process = "Battlefront";
+    let dll = "target/debug/deps/cheatlib.dll";
+    const process: &str = "Battlefront";
     
     inject(process, dll);
 }
@@ -65,10 +65,9 @@ fn inject(process: &str, dll: &str){
     };
     println!("LoadLibrary at: {:#X?}", loadlib_addr);
 
-
-    let full_path = std::fs::canonicalize(dll).expect("DLL not found").to_str().unwrap().replace("\\\\?\\", "");
-    let path_size = full_path.len() as usize + 1;
-    println!("{:?}, Len: {}", full_path, path_size);
+    let full_path: String = std::fs::canonicalize(dll).expect("DLL not found").to_str().unwrap().replace("\\\\?\\", "");
+    let path_size: usize = full_path.len();
+    println!("{}, Len: {}", full_path, path_size);
 
     // Open the target application with permissions to create the DLL and write memory
     let handle_process = unsafe{
