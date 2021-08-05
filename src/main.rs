@@ -46,9 +46,8 @@ fn get_process_id(process: &str) -> Option<(String, u32)>{
     for line in out_str.lines(){
 
         let out_split: Vec<&str> = line.split(",").collect();
-
         let exename: String = out_split[0].to_string();
-        let pid:u32 = out_split[1].parse().expect("PID not a number");
+        let pid: u32 = out_split[1].parse().expect("PID not a number");
 
         return Some((exename, pid))
     }
@@ -59,15 +58,16 @@ fn get_process_id(process: &str) -> Option<(String, u32)>{
 ///
 fn inject(process: &str, dll: &str){
 
-    let process_info = match get_process_id(process) {
-        Some((name,pid)) => (name,pid),
+    let (_, proc_id) = match get_process_id(process) {
+        Some((proc_name, proc_id)) => {
+            println!("Found Process: {}, PID: {}", proc_name, proc_id);
+            (proc_name, proc_id)
+        },
         None => { 
             println!("Could not get the process containing the text \"{}\" does it exist?", process);
             return
         }
     };
-
-    println!("Found Process: {}, PID: {}", process_info.0, process_info.1);
   
     let loadlib_addr = unsafe {
         GetProcAddress(
@@ -88,7 +88,7 @@ fn inject(process: &str, dll: &str){
         OpenProcess(PROCESS_CREATE_THREAD | PROCESS_VM_WRITE |
         PROCESS_VM_OPERATION | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
         0,
-        process_info.1)
+        proc_id)
     };
     assert!(handle_process != core::ptr::null_mut(), "Process Handle is null");
     println!("Process Handle: {:?}", handle_process);
@@ -102,15 +102,18 @@ fn inject(process: &str, dll: &str){
     println!("Allocation Base: {:?}", my_base_address);
     assert!(!my_base_address.is_null(), "Allocation failed");
     
-    let mut n = 0;
+    let mut bytes_written_to_process = 0;
 
-    unsafe {assert!(WriteProcessMemory(handle_process,
-        my_base_address,
-        core::mem::transmute(full_path.as_ptr()), 
-        path_size, 
-        &mut n) != 0, "Could not write to process") };
+    unsafe {assert!(
+        WriteProcessMemory(
+            handle_process,
+            my_base_address,
+            core::mem::transmute(full_path.as_ptr()), 
+            path_size, 
+            &mut bytes_written_to_process
+        ) != 0, "Could not write to process") };
 
-    println!("Wrote {} bytes", n);
+    println!("Wrote {} bytes", bytes_written_to_process);
 
     let handle_thread = unsafe {
         CreateRemoteThread(handle_process,
@@ -121,13 +124,13 @@ fn inject(process: &str, dll: &str){
             0, 
             core::ptr::null_mut())
     };
+    assert!(!handle_thread.is_null(), "Could not create thread in remote process");
     println!("Thread Handle: {:?}", handle_thread);
 
     let status = unsafe {WaitForSingleObject(handle_thread, 0xFFFFFFFF)};
 
     println!("Wait Status: {:X}",status);
 
-    
     unsafe {assert!(CloseHandle(handle_thread) != 0, "Thread handle failed to close sucessfully")};
 
     unsafe {VirtualFreeEx(handle_process, core::mem::transmute(full_path.as_ptr()), 0, MEM_RELEASE)};

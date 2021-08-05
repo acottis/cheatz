@@ -1,3 +1,5 @@
+//! Must be compiled with stable-i686-pc-windows-msvc as the game is 32 bit
+//! This is a generic patcher that updates a memory address of a live process when a key is pressed//! 
 use winapi::um::processthreadsapi::CreateThread;
 use winapi::um::consoleapi::AllocConsole;
 use winapi::um::winuser::GetAsyncKeyState;
@@ -19,7 +21,6 @@ pub extern "system" fn DllMain(hinst: *mut usize, reason: Reason, _reserved: usi
         Reason::DllThreadAttach => on_thread_attach(),
         Reason::DllThreadDetach => on_thread_detach(),
     }
-
     true
 }
 
@@ -28,7 +29,7 @@ extern fn on_dll_attach(hinst: *mut usize){
     unsafe {AllocConsole()};
     println!("cheatDll Base Address: {:?}", hinst); 
 
-    let x = unsafe { 
+    let thread_handle = unsafe { 
         CreateThread(
             core::ptr::null_mut(),
             0, 
@@ -38,7 +39,7 @@ extern fn on_dll_attach(hinst: *mut usize){
             core::ptr::null_mut()
         )};
 
-    println!("Created Thread in DLL: {:?}", x);
+    println!("Created Thread in DLL: {:?}", thread_handle);
 
 }
 extern fn on_dll_detach(){
@@ -57,7 +58,7 @@ fn cheat_main(hinst: *mut usize){
 
     println!("Process Attached, base address: {:?}", hinst);
 
-    let kc_reverse = &mut MemoryHack::new(0x253C25,b"\x29");
+    let kc_reverse = &mut MemoryHack::new(0x253C25, b"\x29");
 
     loop{
         std::thread::sleep(std::time::Duration::from_millis(10));
