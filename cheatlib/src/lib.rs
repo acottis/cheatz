@@ -1,5 +1,20 @@
 //! Must be compiled with stable-i686-pc-windows-msvc as the game is 32 bit
 //! This is a generic patcher that updates a memory address of a live process when a key is pressed//! 
+//! 
+//! ### Memory Addresses:
+//! - BattlefrontII.exe+0x253C25 -> b"\x29" (Reverse the kill count on kill)
+//! - BattlefrontII.exe+0x8908E -> b"\x90\x90\x90\x90\x90" (Turns off all damage)
+//! - BattlefrontII.exe+0x8908E -> b"\xF3\x0F\x58\xC2" (Reverse Damage)
+//! 
+//! ### Current Cheats (BattlefrontII.exe)
+//! ```rust
+//!     let kc_reverse = &mut MemoryHack::new(0x253C25, b"\x29");
+//!     let dmg_off = &mut MemoryHack::new(0x8908E, b"\x90\x90\x90\x90\x90");
+//!     let dmg_reverse = &mut MemoryHack::new(0x89081, b"\xF3\x0F\x58\xC2"); 
+//! ```
+
+#[warn(missing_docs)]
+
 use winapi::um::processthreadsapi::CreateThread;
 use winapi::um::consoleapi::AllocConsole;
 use winapi::um::winuser::GetAsyncKeyState;
@@ -44,6 +59,7 @@ extern fn on_dll_attach(hinst: *mut usize){
 }
 extern fn on_dll_detach(){
     println!("Process Detached");
+    unsafe { winapi::um::wincon::FreeConsole(); }
 }
 extern fn on_thread_attach(){
     println!("Thread Attached");
@@ -58,18 +74,43 @@ fn cheat_main(hinst: *mut usize){
 
     println!("Process Attached, base address: {:?}", hinst);
 
-    let kc_reverse = &mut MemoryHack::new(0x253C25, b"\x29");
+
+    let mut hacks = [
+        &mut MemoryHack::new(0x253C25, b"\x29"), // KC_REVERSE
+        &mut MemoryHack::new(0x8908E, b"\x90\x90\x90\x90\x90"), // DMG_OFF
+        &mut MemoryHack::new(0x89081, b"\xF3\x0F\x58\xC2") // DMG_REVERSE
+    ];
+    // let kc_reverse = &mut MemoryHack::new(0x253C25, b"\x29");
+    // let dmg_off = &mut MemoryHack::new(0x8908E, b"\x90\x90\x90\x90\x90");
+    // let dmg_reverse = &mut MemoryHack::new(0x89081, b"\xF3\x0F\x58\xC2"); 
 
     loop{
         std::thread::sleep(std::time::Duration::from_millis(10));
         
         if key_down(Key::F5){
             println!("F5 is pressed");
-            kc_reverse.patch_bytes();
+            //dmg_reverse.patch_bytes();
+            //dmg_reverse.patch_bytes();
+            hacks[2].patch_bytes();
         }
         if key_down(Key::F6){
             println!("F6 is pressed");
-            kc_reverse.unpatch_bytes();
+            hacks[2].unpatch_bytes();
+           // kc_reverse.unpatch_bytes();
+        }
+        // When ESC is pressed we unpatch all cheats and unload the DLL which triggers a process unload
+        if key_down(Key::ESC){
+            // Remove all active patches
+            for hack in hacks.iter_mut(){
+                hack.unpatch_bytes();
+            }
+            // Unload the library
+            unsafe {
+                winapi::um::libloaderapi::FreeLibraryAndExitThread(
+                    core::mem::transmute(hinst),
+                    0
+                )
+            }
         }
     };
 }

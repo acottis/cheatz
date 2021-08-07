@@ -6,9 +6,10 @@
 //! - ~~Split into two crates~~
 //! - Better error handling on opening game (Half done)
 //! - Improve user input of the DLL path and process name
-//! 
-//! ### Memeory Addresses:
-//! BattlefrontII.exe+253C25 Address where the kill count is changed
+//! - Implement a check for the expected memory state before injecting the cheat
+//! - Write Code Cave for an exisiting easy hack
+//! - Hook a process
+
 #[warn(missing_docs)]
 
 use winapi::um::libloaderapi::{GetProcAddress, LoadLibraryA};
