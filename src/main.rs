@@ -12,11 +12,10 @@
 
 use winapi::um::handleapi::CloseHandle;
 #[warn(missing_docs)]
-use winapi::um::libloaderapi::{GetProcAddress, LoadLibraryA};
 use winapi::um::memoryapi::{
-    VirtualAllocEx, VirtualFreeEx, WriteProcessMemory,
+    VirtualFreeEx, WriteProcessMemory,
 };
-use winapi::um::processthreadsapi::{CreateRemoteThread, OpenProcess};
+use winapi::um::processthreadsapi::CreateRemoteThread;
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winnt::{
     MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE,
@@ -26,16 +25,15 @@ use winapi::um::winnt::{
 
 use anyhow::{bail, Result};
 
-mod mywinapi;
+use crate::wynapi::virtual_alloc_ex;
+
+mod wynapi;
 /// Entry Point, here two variables currently need changed by the user. "dll" and "PROCESS" the dll is the path to the dll we want to inject and PROCESS is the string that the process id we are searching for contains
 ///
 fn main() {
     // Take the first command line Arg or defult to injecting notepad.exe
-    let target: String = if let Some(target) = std::env::args().nth(1) {
-        target
-    } else {
-        String::from("notepad.exe")
-    };
+    let target: String =
+        std::env::args().nth(1).unwrap_or("notepad.exe".to_owned());
 
     let dll = "target/debug/deps/cheatlib.dll";
 
@@ -45,21 +43,23 @@ fn main() {
 /// Caveat: it returns the first PID it finds, even if their are multiple
 fn get_pid_from_name(process_name: &str) -> Result<u32> {
     // Gets all running processes
-    let pids = mywinapi::enum_processes()?;
+    let pids = wynapi::enum_processes()?;
     let process_name = process_name.to_lowercase();
     for pid in &pids {
         // Open each proccess from its PID
-        let handle = mywinapi::open_process(*pid);
+        let handle = wynapi::open_process(
+            *pid,
+            PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+        );
         if let Some(h) = handle {
             // Get the module handle (Unneeded?)
-            // let mh = mywinapi::enum_process_modules(h)?;
+            // let mh = wynapi::enum_process_modules(h)?;
             // Get the process name
             let module_name =
-                mywinapi::get_module_base_name_a(h, core::ptr::null_mut())?
+                wynapi::get_module_base_name_a(h, core::ptr::null_mut())?
                     .to_lowercase();
             // Close the handle once we are done
-            mywinapi::close_handle(h)?;
-            println!("{module_name}");
+            wynapi::close_handle(h)?;
             if module_name == process_name {
                 return Ok(*pid as u32);
             }
@@ -72,14 +72,11 @@ fn get_pid_from_name(process_name: &str) -> Result<u32> {
 fn inject(process_name: &str, dll: &str) {
     let pid = get_pid_from_name(&process_name).unwrap();
 
-    let loadlib_addr = unsafe {
-        GetProcAddress(
-            LoadLibraryA("kernelbase.dll\0".as_ptr() as *const i8),
-            "LoadLibraryA\0".as_ptr() as *const i8,
-        ) as *const i8
-    };
-    println!("LoadLibrary at: {:#X?}", loadlib_addr);
+    // Get the address of the LoadLibaryA Function
+    let loadlib_addr =
+        wynapi::get_proc_address("kernelbase.dll", "LoadLibraryA").unwrap();
 
+    // !!!!!!!!!!!!!!Fix this after!!!!!!!!!!!!!!!!!!!!!!!!!!!
     let full_path: String = std::fs::canonicalize(dll)
         .expect("DLL not found")
         .to_str()
@@ -89,42 +86,34 @@ fn inject(process_name: &str, dll: &str) {
     println!("{}, Len: {}", full_path, path_size);
 
     // Open the target application with permissions to create the DLL and write memory
-    let handle_process = unsafe {
-        OpenProcess(
-            PROCESS_CREATE_THREAD
-                | PROCESS_VM_WRITE
-                | PROCESS_VM_OPERATION
-                | PROCESS_QUERY_INFORMATION
-                | PROCESS_VM_READ,
-            0,
-            pid,
-        )
+    let p_handle = if let Some(handle) = wynapi::open_process(
+        pid,
+        PROCESS_CREATE_THREAD
+            | PROCESS_VM_WRITE
+            | PROCESS_VM_OPERATION
+            | PROCESS_QUERY_INFORMATION
+            | PROCESS_VM_READ,
+    ) {
+        handle
+    } else {
+        panic!("Could not open process");
     };
-    assert!(
-        handle_process != core::ptr::null_mut(),
-        "Process Handle is null"
-    );
-    println!("Process Handle: {:?}", handle_process);
 
-    let my_base_address = unsafe {
-        VirtualAllocEx(
-            handle_process,
-            core::ptr::null_mut(),
-            path_size,
-            MEM_COMMIT | MEM_RESERVE,
-            PAGE_READWRITE,
-        )
-    };
-    println!("Allocation Base: {:?}", my_base_address);
-    assert!(!my_base_address.is_null(), "Allocation failed");
+    // Get base address of target process
+    let alloc_base_addr = virtual_alloc_ex(
+        p_handle,
+        50,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_READWRITE,
+    ).unwrap();
 
     let mut bytes_written_to_process = 0;
 
     unsafe {
         assert!(
             WriteProcessMemory(
-                handle_process,
-                my_base_address,
+                core::mem::transmute(p_handle),
+                core::mem::transmute(alloc_base_addr),
                 core::mem::transmute(full_path.as_ptr()),
                 path_size,
                 &mut bytes_written_to_process
@@ -137,11 +126,11 @@ fn inject(process_name: &str, dll: &str) {
 
     let handle_thread = unsafe {
         CreateRemoteThread(
-            handle_process,
+            core::mem::transmute(p_handle),
             core::ptr::null_mut(),
             0,
             core::mem::transmute(loadlib_addr),
-            my_base_address,
+            core::mem::transmute(alloc_base_addr),
             0,
             core::ptr::null_mut(),
         )
@@ -165,7 +154,7 @@ fn inject(process_name: &str, dll: &str) {
 
     unsafe {
         VirtualFreeEx(
-            handle_process,
+            core::mem::transmute(p_handle),
             core::mem::transmute(full_path.as_ptr()),
             0,
             MEM_RELEASE,
@@ -174,7 +163,7 @@ fn inject(process_name: &str, dll: &str) {
 
     unsafe {
         assert!(
-            CloseHandle(handle_process) != 0,
+            CloseHandle(core::mem::transmute(p_handle)) != 0,
             "Process Handle failed to close sucessfully"
         )
     };

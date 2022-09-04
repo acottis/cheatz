@@ -1,18 +1,25 @@
-#![allow(dead_code)]
+//! This file does the raw windows function calls and puts a rust wrapper ontop to
+//! abstract away the unsafe usage and windows types
 
 use anyhow::Result;
+use core::ffi::c_void;
 use core::mem::size_of;
 
 type DWORD = i32;
-type WORD = i16;
-type UINT = u32;
-type WPARAM = *const i32;
-type HANDLE = *mut core::ffi::c_void;
-type HWND = HANDLE;
+type HANDLE = *mut c_void;
+type LPVOID = *mut c_void;
 type HMODULE = HANDLE;
+type FARPROC = *const c_void;
+type LPCSTR = *const i8;
 
-const PROCESS_QUERY_INFORMATION: DWORD = 0x0400;
-const PROCESS_VM_READ: DWORD = 0x0010;
+const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+const PROCESS_VM_READ: u32 = 0x0010;
+const PROCESS_CREATE_THREAD: u32 = 0x0002;
+const PROCESS_VM_WRITE: u32 = 0x0020;
+const PROCESS_VM_OPERATION: u32 = 0x0008;
+
+const MEM_COMMIT: u32 = 0x1000;
+const MEM_RESERVE: u32 = 0x2000;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug)]
@@ -58,15 +65,15 @@ extern "system" {
     fn GetLastError() -> DWORD;
     /// https://docs.microsoft.com/en-us/windows/win32/api/Psapi/nf-psapi-enumprocesses
     fn K32EnumProcesses(
-        lpidProcess: *mut DWORD,
+        lpidProcess: *mut u32,
         cb: DWORD,
         lpcbNeeded: &mut DWORD,
     ) -> bool;
     /// https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess
     fn OpenProcess(
-        dwDesiredAccess: DWORD,
+        dwDesiredAccess: u32,
         bInheritHandle: bool,
-        dwProcessId: DWORD,
+        dwProcessId: u32,
     ) -> HANDLE;
     /// https://docs.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-closehandle
     fn CloseHandle(hObject: HANDLE) -> bool;
@@ -84,11 +91,23 @@ extern "system" {
         cb: DWORD,
         lpcbNeeded: *mut DWORD,
     ) -> bool;
+    /// https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress
+    fn GetProcAddress(hModule: HMODULE, lpProcName: *const i8) -> FARPROC;
+    /// https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlea
+    fn GetModuleHandleA(lpModuleName: LPCSTR) -> HMODULE;
+    /// https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex
+    fn VirtualAllocEx(
+        hProcess: HANDLE,
+        lpAddress: LPVOID,
+        dwSize: usize,
+        flAllocationType: u32,
+        flProtect: u32,
+      ) -> LPVOID;
 }
 
 /// Rust wrapper around [K32EnumProcesses], we return all pids
-pub fn enum_processes() -> Result<Vec<i32>> {
-    let mut processes: [DWORD; 1024] = [0i32; 1024];
+pub fn enum_processes() -> Result<Vec<u32>> {
+    let mut processes: [u32; 1024] = [0u32; 1024];
     let cb: DWORD = (processes.len() * size_of::<DWORD>()) as DWORD;
     let mut process_count_as_bytes: DWORD = 0;
     let succeeded = unsafe {
@@ -109,17 +128,15 @@ pub fn enum_processes() -> Result<Vec<i32>> {
 }
 
 /// Rust wrapper around [OpenProcess], takes a pid returns a [HANDLE]
-pub fn open_process(pid: i32) -> Option<HANDLE> {
-    let handle = unsafe {
-        OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid)
-    };
+pub fn open_process(pid: u32, permissions: u32) -> Option<HANDLE> {
+    let handle = unsafe { OpenProcess(permissions, false, pid) };
     if handle.is_null() {
         return None;
     }
-
     Some(handle)
 }
 /// Rust wrapper around [CloseHandle], takes a [HANDLE] returns a [bool]
+#[inline(always)]
 pub fn close_handle(handle: HANDLE) -> Result<()> {
     let succeeded = unsafe { CloseHandle(handle) };
     if !succeeded {
@@ -128,6 +145,7 @@ pub fn close_handle(handle: HANDLE) -> Result<()> {
     Ok(())
 }
 /// Rust wrapper around [K32GetModuleBaseNameA]
+#[inline(always)]
 pub fn get_module_base_name_a(
     handle: HANDLE,
     module_handle: HANDLE,
@@ -168,4 +186,40 @@ pub fn enum_process_modules(handle: HANDLE) -> Result<Vec<HMODULE>> {
     let module_count = modules_count_as_bytes / (size_of::<HMODULE>() as i32);
 
     Ok(modules[..module_count as usize].to_vec())
+}
+/// Rust wrapper around [GetProcAddress]
+pub fn get_proc_address(
+    module_name: &str,
+    target: &str,
+) -> Result<*const c_void> {
+    let c_module_name = std::ffi::CString::new(module_name)?;
+    let c_target = std::ffi::CString::new(target)?;
+
+    let hm = unsafe { GetModuleHandleA(c_module_name.as_ptr()) };
+    if hm.is_null() {
+        return Err(Error::get_last().into());
+    }
+
+    let addr = unsafe { GetProcAddress(hm, c_target.as_ptr()) };
+    if addr.is_null() {
+        return Err(Error::get_last().into());
+    }
+
+    Ok(addr)
+}
+/// Rust wrapper around [VritualAllocEx]
+pub fn virtual_alloc_ex(process_handle: HANDLE, alloc_size: usize, alloc_type: u32, protection: u32) -> Result<LPVOID> {
+    let alloc_base_addr = unsafe {
+        VirtualAllocEx(
+            process_handle, 
+            core::ptr::null_mut(), 
+            alloc_size, 
+            alloc_type, 
+            protection,
+        )
+    };
+    if alloc_base_addr.is_null() {
+        return Err(Error::get_last().into())
+    }
+    Ok(alloc_base_addr)
 }
