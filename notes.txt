@@ -1,8 +1,0 @@
-BattlefrontII.exe+DE14E - 89 42 38              - mov [edx+38],eax { X Update}
-BattlefrontII.exe+DE146 - 66 0FD6 42 30         - movq [edx+30],xmm0 { Y/Z update}
-
-Z is up
-Memory Layout of the Struct
-Y Axis
-Z Axis
-X Axis
