@@ -8,18 +8,24 @@ use core::mem::size_of;
 type DWORD = i32;
 type HANDLE = *mut c_void;
 type LPVOID = *mut c_void;
+type LPCVOID = *const c_void;
 type HMODULE = HANDLE;
 type FARPROC = *const c_void;
 type LPCSTR = *const i8;
 
-const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
-const PROCESS_VM_READ: u32 = 0x0010;
-const PROCESS_CREATE_THREAD: u32 = 0x0002;
-const PROCESS_VM_WRITE: u32 = 0x0020;
-const PROCESS_VM_OPERATION: u32 = 0x0008;
+pub mod flags {
+    pub const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+    pub const PROCESS_VM_READ: u32 = 0x0010;
+    pub const PROCESS_CREATE_THREAD: u32 = 0x0002;
+    pub const PROCESS_VM_WRITE: u32 = 0x0020;
+    pub const PROCESS_VM_OPERATION: u32 = 0x0008;
 
-const MEM_COMMIT: u32 = 0x1000;
-const MEM_RESERVE: u32 = 0x2000;
+    pub const MEM_COMMIT: u32 = 0x1000;
+    pub const MEM_RESERVE: u32 = 0x2000;
+    pub const MEM_RELEASE: u32 = 0x8000;
+
+    pub const PAGE_READWRITE: u32 = 0x0004;
+}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug)]
@@ -60,6 +66,7 @@ impl Error {
     }
 }
 
+#[allow(dead_code)]
 #[link(name = "Kernel32")]
 extern "system" {
     fn GetLastError() -> DWORD;
@@ -102,7 +109,15 @@ extern "system" {
         dwSize: usize,
         flAllocationType: u32,
         flProtect: u32,
-      ) -> LPVOID;
+    ) -> LPVOID;
+    /// https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory
+    fn WriteProcessMemory(
+        hProcess: HANDLE,
+        lpBaseAddress: LPVOID,
+        lpBuffer: LPCVOID,
+        nSize: usize,
+        lpNumberOfBytesWritten: &mut usize,
+    ) -> bool;
 }
 
 /// Rust wrapper around [K32EnumProcesses], we return all pids
@@ -166,7 +181,7 @@ pub fn get_module_base_name_a(
     Ok(String::from_utf8(name[..len as usize].to_vec())?)
 }
 /// Rust wrapper around [K32EnumProcessModules]
-pub fn enum_process_modules(handle: HANDLE) -> Result<Vec<HMODULE>> {
+pub fn _enum_process_modules(handle: HANDLE) -> Result<Vec<HMODULE>> {
     const BUF_SIZE: usize = 500;
 
     let cb = BUF_SIZE * size_of::<HMODULE>();
@@ -207,7 +222,7 @@ pub fn get_proc_address(
 
     Ok(addr)
 }
-/// Rust wrapper around [VritualAllocEx]
+/// Rust wrapper around [VirtualAllocEx]
 pub fn virtual_alloc_ex(process_handle: HANDLE, alloc_size: usize, alloc_type: u32, protection: u32) -> Result<LPVOID> {
     let alloc_base_addr = unsafe {
         VirtualAllocEx(
@@ -222,4 +237,27 @@ pub fn virtual_alloc_ex(process_handle: HANDLE, alloc_size: usize, alloc_type: u
         return Err(Error::get_last().into())
     }
     Ok(alloc_base_addr)
+}
+/// Rust wrapper around [WriteProcessMemory]
+pub fn write_process_memory(
+    process_handle: HANDLE, 
+    alloc_base_addr: LPVOID,
+    buf: *const u8,
+    buf_size: usize
+) -> Result<usize>{
+
+    let mut bytes_written = 0;
+
+    let succeeded = unsafe {
+        WriteProcessMemory(
+            process_handle, 
+            alloc_base_addr, 
+            buf as LPCVOID, 
+            buf_size, 
+            &mut bytes_written)
+    };
+    if !succeeded {
+        return Err(Error::get_last().into())
+    }
+    Ok(bytes_written)
 }
