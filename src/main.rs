@@ -87,10 +87,11 @@ fn inject(process_name: &str, dll: &str) {
         panic!("Could not open process");
     };
 
-    // Get base address of target process
+    // Allocate inside target process with length of the [dll_path] and then 
+    // get the address returned
     let alloc_base_addr = wynapi::virtual_alloc_ex(
         process_handle,
-        50,
+        dll_path_len,
         MEM_COMMIT | MEM_RESERVE,
         PAGE_READWRITE,
     )
