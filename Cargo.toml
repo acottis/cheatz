@@ -8,5 +8,6 @@ edition = "2018"
 
 
 [dependencies]
+anyhow = "1.0.63"
 cheatlib = { path = "cheatlib"}
 winapi = { version = "0.3.9", features = ["libloaderapi", "fileapi", "winuser", "processthreadsapi", "handleapi", "memoryapi", "synchapi","consoleapi", "errhandlingapi"]} 

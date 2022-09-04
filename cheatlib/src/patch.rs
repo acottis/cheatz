@@ -143,13 +143,3 @@ pub enum MemoryRWError{
     CantWrite,
     CantRead,
 }
-
-// impl core::fmt::Display for PatchStatus{
-//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-//         match self {
-//             PatchStatus::CantRead => write!(f, "Can not read from target memory"),
-//             PatchStatus::CantWrite => write!(f, "Can not write to target memory"),
-//         }
-//     }
-// }
-
