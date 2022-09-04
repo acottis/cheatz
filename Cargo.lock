@@ -28,7 +28,6 @@ dependencies = [
  "anyhow",
  "cheatlib",
  "log",
- "winapi",
 ]
 
 [[package]]

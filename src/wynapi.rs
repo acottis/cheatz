@@ -1,9 +1,10 @@
-//! This file does the raw windows function calls and puts a rust wrapper ontop to
-//! abstract away the unsafe usage and windows types
+//! This file does the raw windows function calls and puts a rust wrapper ontop
+//! to abstract away the unsafe usage and windows types
 
 use anyhow::Result;
 use core::ffi::c_void;
 use core::mem::size_of;
+use std::os::windows::io::HandleOrNull;
 
 type DWORD = i32;
 type HANDLE = *mut c_void;
@@ -118,6 +119,18 @@ extern "system" {
         nSize: usize,
         lpNumberOfBytesWritten: &mut usize,
     ) -> bool;
+    /// https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread
+    fn CreateRemoteThread(
+        hProcess: HANDLE,
+        lpThreadAttributes: *const u8,
+        dwStackSize: usize,
+        lpStartAddress: LPCVOID,
+        lpParameter: LPCVOID,
+        dwCreationFlags: u32,
+        lpThreadId: &mut u32,
+    ) -> HANDLE;
+    /// https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject
+    fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: u32) -> u32;
 }
 
 /// Rust wrapper around [K32EnumProcesses], we return all pids
@@ -223,41 +236,79 @@ pub fn get_proc_address(
     Ok(addr)
 }
 /// Rust wrapper around [VirtualAllocEx]
-pub fn virtual_alloc_ex(process_handle: HANDLE, alloc_size: usize, alloc_type: u32, protection: u32) -> Result<LPVOID> {
+pub fn virtual_alloc_ex(
+    process_handle: HANDLE,
+    alloc_size: usize,
+    alloc_type: u32,
+    protection: u32,
+) -> Result<LPVOID> {
     let alloc_base_addr = unsafe {
         VirtualAllocEx(
-            process_handle, 
-            core::ptr::null_mut(), 
-            alloc_size, 
-            alloc_type, 
+            process_handle,
+            core::ptr::null_mut(),
+            alloc_size,
+            alloc_type,
             protection,
         )
     };
     if alloc_base_addr.is_null() {
-        return Err(Error::get_last().into())
+        return Err(Error::get_last().into());
     }
     Ok(alloc_base_addr)
 }
 /// Rust wrapper around [WriteProcessMemory]
 pub fn write_process_memory(
-    process_handle: HANDLE, 
+    process_handle: HANDLE,
     alloc_base_addr: LPVOID,
     buf: *const u8,
-    buf_size: usize
-) -> Result<usize>{
-
+    buf_size: usize,
+) -> Result<usize> {
     let mut bytes_written = 0;
 
     let succeeded = unsafe {
         WriteProcessMemory(
-            process_handle, 
-            alloc_base_addr, 
-            buf as LPCVOID, 
-            buf_size, 
-            &mut bytes_written)
+            process_handle,
+            alloc_base_addr,
+            buf as LPCVOID,
+            buf_size,
+            &mut bytes_written,
+        )
     };
     if !succeeded {
-        return Err(Error::get_last().into())
+        return Err(Error::get_last().into());
     }
     Ok(bytes_written)
+}
+/// Rust wrapper around [CreateRemoteThread]
+pub fn create_remote_thread(
+    process_handle: HANDLE,
+    fn_to_call: *const u8,
+    fn_param: *const u8,
+) -> Result<(HANDLE, u32)> {
+    let mut thread_id = 0;
+    let thread_handle = unsafe {
+        CreateRemoteThread(
+            process_handle,
+            core::ptr::null(),
+            0,
+            fn_to_call as LPCVOID,
+            fn_param as LPCVOID,
+            0,
+            &mut thread_id,
+        )
+    };
+    if thread_handle.is_null() {
+        return Err(Error::get_last().into());
+    }
+    Ok((thread_handle, thread_id))
+}
+/// Rust wrapper around [WaitForSingleObject]
+pub fn wait_for_single_object(handle: HANDLE, milliseconds: u32) -> Result<()> {
+    let status = unsafe { WaitForSingleObject(handle, milliseconds) };
+    if status != 0 {
+        anyhow::bail!(
+            "Object never reached signaled state after {milliseconds} miliseconds"
+        )
+    }
+    Ok(())
 }
